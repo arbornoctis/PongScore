@@ -79,6 +79,24 @@ Button player1Minus(PLAYER1_MINUS);
 Button player2Plus(PLAYER2_PLUS);
 Button player2Minus(PLAYER2_MINUS);
 
+// --------------------------------------------------
+// Spielstand
+// --------------------------------------------------
+
+int player1Score = 0;
+int player2Score = 0;
+
+// --------------------------------------------------
+// Spielstand ausgeben
+// --------------------------------------------------
+
+void printScore() {
+
+    Serial.print("Spielstand: ");
+    Serial.print(player1Score);
+    Serial.print(" : ");
+    Serial.println(player2Score);
+}
 
 // --------------------------------------------------
 // Setup
@@ -90,7 +108,10 @@ void setup() {
     delay(1000);
 
     Serial.println();
-    Serial.println("=== PongScore - Button Event Test ===");
+    Serial.println("================================");
+    Serial.println("     PongScore - Score Test");
+    Serial.println("================================");
+    Serial.println();
 
     // MCP23017 initialisieren
     if (!mcp.begin_I2C(0x20)) {
@@ -120,19 +141,52 @@ void setup() {
 
 void loop() {
 
+    // ----------------------------------------------
+    // Spieler 1
+    // ----------------------------------------------
+
     if (player1Plus.pressed()) {
-        Serial.println("EVENT: Spieler 1 PLUS");
+
+        player1Score++;
+
+        Serial.println("Spieler 1: +1");
+        printScore();
     }
 
     if (player1Minus.pressed()) {
-        Serial.println("EVENT: Spieler 1 MINUS");
+
+        if (player1Score > 0) {
+            player1Score--;
+        }
+
+        Serial.println("Spieler 1: -1");
+        printScore();
     }
+    
+    // ----------------------------------------------
+    // Spieler 2
+    // ----------------------------------------------
 
     if (player2Plus.pressed()) {
-        Serial.println("EVENT: Spieler 2 PLUS");
+
+        player2Score++;
+
+        Serial.println("Spieler 2: +1");
+        printScore();
     }
 
     if (player2Minus.pressed()) {
-        Serial.println("EVENT: Spieler 2 MINUS");
+
+        if (player2Score > 0) {
+            player2Score--;
+        }
+
+        Serial.println("Spieler 2: -1");
+        printScore();
     }
+
+// if ((player1Score + player2Score) % 4 < 2)
+//    Spieler A hat Aufschlag
+//    sonst Spieler B hat Aufschlag.
+
 }
