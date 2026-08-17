@@ -1,137 +1,126 @@
 #include <Arduino.h>
-#include <Wire.h>
-#include <Adafruit_MCP23X17.h>
+#include <MD_MAX72xx.h>
 
-Adafruit_MCP23X17 mcp;
+// --------------------------------------------------
+// MAX7219 Anschlüsse
+// --------------------------------------------------
 
-// MCP23017 Eingänge
-const uint8_t PLAYER1_PLUS  = 0;  // GPA0
-const uint8_t PLAYER1_MINUS = 1;  // GPA1
-const uint8_t PLAYER2_PLUS  = 2;  // GPA2
-const uint8_t PLAYER2_MINUS = 3;  // GPA3
+const uint8_t DIN_PIN = 23;
+const uint8_t CLK_PIN = 18;
+const uint8_t CS_PIN  = 17;
+
+const uint8_t NUM_DEVICES = 4;
 
 
 // --------------------------------------------------
-// Button-Klasse
+// MAX7219 initialisieren
 // --------------------------------------------------
 
-class Button {
-public:
-    Button(uint8_t pin) {
-        this->pin = pin;
-    }
-
-    void begin() {
-        mcp.pinMode(pin, INPUT_PULLUP);
-
-        currentState = mcp.digitalRead(pin);
-        lastReading = currentState;
-        lastDebounceTime = millis();
-    }
-
-    // Gibt genau einmal true zurück,
-    // wenn der Taster gedrückt wurde.
-    bool pressed() {
-
-        bool reading = mcp.digitalRead(pin);
-
-        // Hat sich der physikalische Zustand verändert?
-        if (reading != lastReading) {
-            lastDebounceTime = millis();
-            lastReading = reading;
-        }
-
-        // Zustand muss für 30 ms stabil sein
-        if ((millis() - lastDebounceTime) > debounceTime) {
-
-            if (reading != currentState) {
-                currentState = reading;
-
-                // LOW bedeutet bei INPUT_PULLUP:
-                // Taster wurde gedrückt.
-                if (currentState == LOW) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-private:
-    uint8_t pin;
-
-    bool currentState = HIGH;
-    bool lastReading = HIGH;
-
-    unsigned long lastDebounceTime = 0;
-
-    static const unsigned long debounceTime = 30;
-};
+MD_MAX72XX mx = MD_MAX72XX(
+    MD_MAX72XX::FC16_HW,
+    DIN_PIN,
+    CLK_PIN,
+    CS_PIN,
+    NUM_DEVICES
+);
 
 
 // --------------------------------------------------
-// Unsere vier Taster
+// Pixel setzen
+//
+// Unsere logischen Koordinaten:
+//
+// x = 0 ... 7  -> horizontal von links nach rechts
+// y = 0 ... 7  -> vertikal von oben nach unten
+//
+// MD_MAX72XX erwartet bei unseren Modulen:
+//
+// 1. Parameter = vertikale Position
+// 2. Parameter = horizontale Position
 // --------------------------------------------------
 
-Button player1Plus(PLAYER1_PLUS);
-Button player1Minus(PLAYER1_MINUS);
-Button player2Plus(PLAYER2_PLUS);
-Button player2Minus(PLAYER2_MINUS);
+void setPixel(uint8_t device, uint8_t x, uint8_t y, bool state)
+{
+    uint16_t globalX = device * 8 + x;
 
-// --------------------------------------------------
-// Spielstand
-// --------------------------------------------------
-
-int player1Score = 0;
-int player2Score = 0;
-
-// --------------------------------------------------
-// Spielstand ausgeben
-// --------------------------------------------------
-
-void printScore() {
-
-    Serial.print("Spielstand: ");
-    Serial.print(player1Score);
-    Serial.print(" : ");
-    Serial.println(player2Score);
+    mx.setPoint(y, globalX, state);
 }
+
+
+// --------------------------------------------------
+// Ein einzelnes 8x8-Muster anzeigen
+// --------------------------------------------------
+
+void drawTestPattern(uint8_t device)
+{
+    // Modul löschen
+    for (uint8_t x = 0; x < 8; x++)
+    {
+        for (uint8_t y = 0; y < 8; y++)
+        {
+            setPixel(device, x, y, false);
+        }
+    }
+
+
+    // ------------------------------------------------
+    // Asymmetrisches Testmuster
+    // ------------------------------------------------
+
+    // Linke obere Ecke
+    setPixel(device, 0, 0, true);
+    setPixel(device, 1, 0, true);
+    setPixel(device, 0, 1, true);
+
+    // Rechte obere Ecke
+    setPixel(device, 6, 0, true);
+    setPixel(device, 7, 0, true);
+
+    // Diagonale
+    for (uint8_t i = 0; i < 8; i++)
+    {
+        setPixel(device, i, i, true);
+    }
+
+    // Zusätzliches Muster unten rechts
+    setPixel(device, 5, 6, true);
+    setPixel(device, 6, 6, true);
+    setPixel(device, 7, 6, true);
+
+    setPixel(device, 6, 7, true);
+    setPixel(device, 7, 7, true);
+}
+
 
 // --------------------------------------------------
 // Setup
 // --------------------------------------------------
 
-void setup() {
-
+void setup()
+{
     Serial.begin(115200);
     delay(1000);
 
     Serial.println();
     Serial.println("================================");
-    Serial.println("     PongScore - Score Test");
+    Serial.println(" PongScore - Matrix Orientierung");
     Serial.println("================================");
     Serial.println();
 
-    // MCP23017 initialisieren
-    if (!mcp.begin_I2C(0x20)) {
-        Serial.println("FEHLER: MCP23017 nicht gefunden!");
+    mx.begin();
 
-        while (true) {
-            delay(1000);
-        }
+    // Helligkeit 0 ... 15
+    mx.control(MD_MAX72XX::INTENSITY, 5);
+
+    mx.clear();
+
+    // Dasselbe Muster auf allen vier Modulen
+    for (uint8_t device = 0; device < NUM_DEVICES; device++)
+    {
+        drawTestPattern(device);
     }
 
-    Serial.println("MCP23017 erfolgreich gefunden!");
-
-    // Taster initialisieren
-    player1Plus.begin();
-    player1Minus.begin();
-    player2Plus.begin();
-    player2Minus.begin();
-
-    Serial.println("Alle vier Taster initialisiert.");
-    Serial.println();
+    Serial.println("Testmuster auf allen vier Modulen angezeigt.");
 }
 
 
@@ -139,54 +128,6 @@ void setup() {
 // Loop
 // --------------------------------------------------
 
-void loop() {
-
-    // ----------------------------------------------
-    // Spieler 1
-    // ----------------------------------------------
-
-    if (player1Plus.pressed()) {
-
-        player1Score++;
-
-        Serial.println("Spieler 1: +1");
-        printScore();
-    }
-
-    if (player1Minus.pressed()) {
-
-        if (player1Score > 0) {
-            player1Score--;
-        }
-
-        Serial.println("Spieler 1: -1");
-        printScore();
-    }
-    
-    // ----------------------------------------------
-    // Spieler 2
-    // ----------------------------------------------
-
-    if (player2Plus.pressed()) {
-
-        player2Score++;
-
-        Serial.println("Spieler 2: +1");
-        printScore();
-    }
-
-    if (player2Minus.pressed()) {
-
-        if (player2Score > 0) {
-            player2Score--;
-        }
-
-        Serial.println("Spieler 2: -1");
-        printScore();
-    }
-
-// if ((player1Score + player2Score) % 4 < 2)
-//    Spieler A hat Aufschlag
-//    sonst Spieler B hat Aufschlag.
-
+void loop()
+{
 }
