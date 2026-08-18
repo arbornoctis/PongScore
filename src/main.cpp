@@ -79,6 +79,15 @@ ResetButton resetButton(&mcp, RESET_BUTTON);
 
 int player1Score = 0;
 int player2Score = 0;
+int player1Sets = 0;
+int player2Sets = 0;
+
+bool setFinished = false;
+bool matchFinished = false;
+bool scoreVisible = true;
+
+unsigned long lastBlinkTime = 0;
+const unsigned long BLINK_INTERVAL = 750;
 
 
 // ==================================================
@@ -96,31 +105,140 @@ bool player1Serves = true;
 // Funktionsdeklarationen
 // ==================================================
 
+void startNextSet();
+void updateSetFinishedBlink();
+void finishSet();
+bool isSetFinished();
+void updateDisplays();
+void printScore();
 void updateServeLEDs();
 
-void updateDisplays();
-
-void printScore();
-
-
 // ==================================================
-// Aufschlag-LEDs anzeigen
+// Nächsten Satz starten und Satzscore vertauschen
 // ==================================================
 
-void updateServeLEDs()
+void startNextSet()
 {
-    if (player1Serves)
+    // Seitenwechsel
+    bool tempServe = player1Serves;
+    player1Serves = !tempServe;
+
+    // Satzanzeigen auf die neue Tischseite beziehen
+    int tempSets = player1Sets;
+    player1Sets = player2Sets;
+    player2Sets = tempSets;
+
+    // Neuer Satz beginnt bei 0:0
+    player1Score = 0;
+    player2Score = 0;
+
+    setFinished = false;
+    scoreVisible = true;
+
+    updateDisplays();
+    updateServeLEDs();
+
+    printScore();
+}
+
+// ==================================================
+// Blinken einschalten
+// ==================================================
+
+void updateSetFinishedBlink()
+{
+    if (!setFinished)
+        return;
+
+    unsigned long currentTime = millis();
+
+    if (currentTime - lastBlinkTime >= BLINK_INTERVAL)
     {
-        mcp.digitalWrite(PLAYER1_LED, HIGH);
-        mcp.digitalWrite(PLAYER2_LED, LOW);
-    }
-    else
-    {
-        mcp.digitalWrite(PLAYER1_LED, LOW);
-        mcp.digitalWrite(PLAYER2_LED, HIGH);
+        lastBlinkTime = currentTime;
+
+        scoreVisible = !scoreVisible;
+
+        if (scoreVisible)
+        {
+            // Anzeigen wieder herstellen
+            if (matchFinished)
+            {
+                // Alle vier Displays wieder anzeigen
+                updateDisplays();
+            }
+            else
+            {
+                // Nur Punktestand wieder anzeigen
+                digits.drawNumber(0, player1Score);
+                digits.drawNumber(1, player2Score);
+            }
+        }
+        else
+        {
+            if (matchFinished)
+            {
+                // Alle vier Displays löschen
+                mx.clear();
+            }
+            else
+            {
+                // Nur Punktanzeigen löschen
+                mx.clear(0);
+                mx.clear(1);
+            }
+        }
     }
 }
 
+// ==================================================
+// Gewonnenen Satz verarbeiten und Ergebnis blinken lassen
+// ==================================================
+
+void finishSet()
+{
+    if (player1Score >= 11 &&
+        player1Score - player2Score >= 2)
+    {
+        player1Sets++;
+    }
+    else if (player2Score >= 11 &&
+             player2Score - player1Score >= 2)
+    {
+        player2Sets++;
+    }
+
+    setFinished = true;
+    scoreVisible = true;
+    lastBlinkTime = millis();
+
+    if (player1Sets >= 3 || player2Sets >= 3)
+    {
+        matchFinished = true;
+    }
+
+    updateDisplays();
+}
+
+// ==================================================
+// Satzende überprüfen
+// ==================================================
+
+bool isSetFinished()
+{
+    if (player1Score >= 11 &&
+        player1Score - player2Score >= 2)
+    {
+        return true;
+    }
+
+    if (player2Score >= 11 &&
+        player2Score - player1Score >= 2)
+    {
+        return true;
+    }
+
+    return false;
+}
 
 // ==================================================
 // Spielstand anzeigen
@@ -128,11 +246,12 @@ void updateServeLEDs()
 
 void updateDisplays()
 {
-    // Display 0 = Spieler 1
+    // Punktestand
     digits.drawNumber(0, player1Score);
-
-    // Display 1 = Spieler 2
     digits.drawNumber(1, player2Score);
+    // Satzstand
+    digits.drawNumber(2, player1Sets);
+    digits.drawNumber(3, player2Sets);
 }
 
 
@@ -148,6 +267,59 @@ void printScore()
     Serial.println(player2Score);
 }
 
+// --------------------------------------------------
+// Aufschlag-LED steuern
+// --------------------------------------------------
+
+void updateServeLEDs()
+{
+    int totalScore = player1Score + player2Score;
+
+    if (player1Score > 9 && player2Score > 9)
+    {
+        // Ab 10:10 wechselt der Aufschlag nach jedem Punkt.
+        // player1Serves bestimmt, wer den ersten Aufschlag des Satzes hatte.
+
+        if (player1Serves && totalScore % 2 == 0)
+        {
+            mcp.digitalWrite(PLAYER1_LED, HIGH);
+            mcp.digitalWrite(PLAYER2_LED, LOW);
+        }
+        else if (!player1Serves && totalScore % 2 == 1)
+        {
+            mcp.digitalWrite(PLAYER1_LED, HIGH);
+            mcp.digitalWrite(PLAYER2_LED, LOW);
+        }
+        else
+        {
+            mcp.digitalWrite(PLAYER1_LED, LOW);
+            mcp.digitalWrite(PLAYER2_LED, HIGH);
+        }
+    }
+    else
+    {
+        // Normaler Satz:
+        // Aufschlag wechselt alle zwei Punkte.
+
+        bool player1HasServe;
+
+        if (player1Serves)
+            player1HasServe = (totalScore % 4 < 2);
+        else
+            player1HasServe = (totalScore % 4 >= 2);
+
+        if (player1HasServe)
+        {
+            mcp.digitalWrite(PLAYER1_LED, HIGH);
+            mcp.digitalWrite(PLAYER2_LED, LOW);
+        }
+        else
+        {
+            mcp.digitalWrite(PLAYER1_LED, LOW);
+            mcp.digitalWrite(PLAYER2_LED, HIGH);
+        }
+    }
+}
 
 // --------------------------------------------------
 // Setup
@@ -252,25 +424,35 @@ void setup()
 
 void loop()
 {
+
+    updateSetFinishedBlink();
+
     // ----------------------------------------------
     // Spieler 1
     // ----------------------------------------------
 
-    if (player1Plus.pressed())
+    if (!setFinished && player1Plus.pressed())
     {
         if (player1Score < 19)
         {
             player1Score++;
 
             updateDisplays();
+            
+            if (isSetFinished())
+            {
+                finishSet();
+            }
+            updateServeLEDs();
 
             Serial.println("Spieler 1: +1");
             printScore();
         }
+        updateServeLEDs();
     }
 
 
-    if (player1Minus.pressed())
+    if (!setFinished && player1Minus.pressed())
     {
         if (player1Score > 0)
         {
@@ -278,9 +460,16 @@ void loop()
 
             updateDisplays();
 
+            if (isSetFinished())
+            {
+                finishSet();
+            }
+            updateServeLEDs();
+
             Serial.println("Spieler 1: -1");
             printScore();
         }
+        updateServeLEDs();
     }
 
 
@@ -288,7 +477,7 @@ void loop()
     // Spieler 2
     // ----------------------------------------------
 
-    if (player2Plus.pressed())
+    if (!setFinished && player2Plus.pressed())
     {
         if (player2Score < 19)
         {
@@ -296,13 +485,20 @@ void loop()
 
             updateDisplays();
 
+            if (isSetFinished())
+            {
+                finishSet();
+            }
+            updateServeLEDs();
+
             Serial.println("Spieler 2: +1");
             printScore();
         }
+        updateServeLEDs();
     }
 
 
-    if (player2Minus.pressed())
+    if (!setFinished && player2Minus.pressed())
     {
         if (player2Score > 0)
         {
@@ -310,9 +506,16 @@ void loop()
 
             updateDisplays();
 
+            if (isSetFinished())
+            {
+                finishSet();
+            }
+            updateServeLEDs();
+
             Serial.println("Spieler 2: -1");
             printScore();
         }
+        updateServeLEDs();
     }
 
 
@@ -322,7 +525,6 @@ void loop()
 
     resetButton.update();
 
-
     // ----------------------------------------------
     // Langer Druck
     // ----------------------------------------------
@@ -331,8 +533,15 @@ void loop()
     {
         player1Score = 0;
         player2Score = 0;
+        player1Sets = 0;
+        player2Sets = 0;
+
+        setFinished = false;
+        matchFinished = false;
+        scoreVisible = true;
 
         updateDisplays();
+        updateServeLEDs();
 
         Serial.println("RESET - neues Match");
         printScore();
@@ -345,11 +554,18 @@ void loop()
 
     if (resetButton.shortPressed())
     {
+        // Wenn der Satz beendet ist:
+        // bei Tastendruck neuen Satz beginnen
+        if (setFinished && !matchFinished)
+        {
+            startNextSet();
+        }
         // Der anfängliche Aufschlag darf nur
         // bei 0 : 0 gewechselt werden.
-
-        if (player1Score == 0 &&
-            player2Score == 0)
+        else if (player1Score == 0 &&
+            player2Score == 0 &&
+            player1Sets == 0 &&
+            player2Sets == 0)
         {
             player1Serves = !player1Serves;
 
