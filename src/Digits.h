@@ -36,11 +36,6 @@ private:
         uint8_t offsetY
     );
 
-    // Die schmale Zehner-1 zeichnen
-    void drawTensOne(
-        uint8_t device
-    );
-
     // Komplettes 8x8-Bild transformieren und anzeigen
     void drawCanvas(
         uint8_t device,

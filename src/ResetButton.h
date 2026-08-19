@@ -2,17 +2,13 @@
 #define RESET_BUTTON_H
 
 #include <Arduino.h>
-#include <Adafruit_MCP23X17.h>
 
 
 class ResetButton
 {
 public:
 
-    ResetButton(
-        Adafruit_MCP23X17* mcp,
-        uint8_t pin
-    );
+    ResetButton(uint8_t pin);
 
     void begin();
 
@@ -30,7 +26,6 @@ public:
 
 private:
 
-    Adafruit_MCP23X17* mcp;
     uint8_t pin;
 
     bool currentState = HIGH;

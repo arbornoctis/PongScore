@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <MD_MAX72xx.h>
-#include <Adafruit_MCP23X17.h>
 
 #include "Digits.h"
 #include "Button.h"
@@ -13,7 +12,7 @@
 
 const uint8_t DIN_PIN = 23;
 const uint8_t CLK_PIN = 18;
-const uint8_t CS_PIN  = 17;
+const uint8_t CS_PIN  = 26;
 
 const uint8_t NUM_DEVICES = 4;
 
@@ -35,42 +34,39 @@ Digits digits(&mx);
 
 
 // ==================================================
-// MCP23017
+// GPIOs
 // ==================================================
 
-Adafruit_MCP23X17 mcp;
+// Scoretaster
+const uint8_t PLAYER1_PLUS  = 21;
+const uint8_t PLAYER1_MINUS = 22;
+const uint8_t PLAYER2_PLUS  = 16;
+const uint8_t PLAYER2_MINUS = 17;
 
+// Drucktaster
+const uint8_t RESET_BUTTON = 4;
 
-// MCP23017 Eingänge
-const uint8_t PLAYER1_PLUS  = 0;  // GPA0
-const uint8_t PLAYER1_MINUS = 1;  // GPA1
-const uint8_t PLAYER2_PLUS  = 2;  // GPA2
-const uint8_t PLAYER2_MINUS = 3;  // GPA3
-
-const uint8_t RESET_BUTTON  = 15; // GPB7
-
-
-// MCP23017 Ausgänge
-const uint8_t PLAYER1_LED = 10;   // GPB2
-const uint8_t PLAYER2_LED = 11;   // GPB3
+// Aufschlag-LEDs
+const uint8_t PLAYER1_LED = 14;
+const uint8_t PLAYER2_LED = 33;
 
 
 // ==================================================
 // Player-Score-Taster
 // ==================================================
 
-Button player1Plus(&mcp, PLAYER1_PLUS);
-Button player1Minus(&mcp, PLAYER1_MINUS);
+Button player1Plus(PLAYER1_PLUS);
+Button player1Minus(PLAYER1_MINUS);
 
-Button player2Plus(&mcp, PLAYER2_PLUS);
-Button player2Minus(&mcp, PLAYER2_MINUS);
+Button player2Plus(PLAYER2_PLUS);
+Button player2Minus(PLAYER2_MINUS);
 
 
 // ==================================================
 // Reset-Taster
 // ==================================================
 
-ResetButton resetButton(&mcp, RESET_BUTTON);
+ResetButton resetButton(RESET_BUTTON);
 
 
 // ==================================================
@@ -113,6 +109,7 @@ void updateDisplays();
 void printScore();
 void updateServeLEDs();
 
+
 // ==================================================
 // Nächsten Satz starten und Satzscore vertauschen
 // ==================================================
@@ -140,6 +137,7 @@ void startNextSet()
 
     printScore();
 }
+
 
 // ==================================================
 // Blinken einschalten
@@ -190,6 +188,7 @@ void updateSetFinishedBlink()
     }
 }
 
+
 // ==================================================
 // Gewonnenen Satz verarbeiten und Ergebnis blinken lassen
 // ==================================================
@@ -219,6 +218,7 @@ void finishSet()
     updateDisplays();
 }
 
+
 // ==================================================
 // Satzende überprüfen
 // ==================================================
@@ -240,6 +240,7 @@ bool isSetFinished()
     return false;
 }
 
+
 // ==================================================
 // Spielstand anzeigen
 // ==================================================
@@ -249,6 +250,7 @@ void updateDisplays()
     // Punktestand
     digits.drawNumber(0, player1Score);
     digits.drawNumber(1, player2Score);
+
     // Satzstand
     digits.drawNumber(2, player1Sets);
     digits.drawNumber(3, player2Sets);
@@ -267,6 +269,7 @@ void printScore()
     Serial.println(player2Score);
 }
 
+
 // --------------------------------------------------
 // Aufschlag-LED steuern
 // --------------------------------------------------
@@ -282,18 +285,18 @@ void updateServeLEDs()
 
         if (player1Serves && totalScore % 2 == 0)
         {
-            mcp.digitalWrite(PLAYER1_LED, HIGH);
-            mcp.digitalWrite(PLAYER2_LED, LOW);
+            digitalWrite(PLAYER1_LED, HIGH);
+            digitalWrite(PLAYER2_LED, LOW);
         }
         else if (!player1Serves && totalScore % 2 == 1)
         {
-            mcp.digitalWrite(PLAYER1_LED, HIGH);
-            mcp.digitalWrite(PLAYER2_LED, LOW);
+            digitalWrite(PLAYER1_LED, HIGH);
+            digitalWrite(PLAYER2_LED, LOW);
         }
         else
         {
-            mcp.digitalWrite(PLAYER1_LED, LOW);
-            mcp.digitalWrite(PLAYER2_LED, HIGH);
+            digitalWrite(PLAYER1_LED, LOW);
+            digitalWrite(PLAYER2_LED, HIGH);
         }
     }
     else
@@ -310,16 +313,17 @@ void updateServeLEDs()
 
         if (player1HasServe)
         {
-            mcp.digitalWrite(PLAYER1_LED, HIGH);
-            mcp.digitalWrite(PLAYER2_LED, LOW);
+            digitalWrite(PLAYER1_LED, HIGH);
+            digitalWrite(PLAYER2_LED, LOW);
         }
         else
         {
-            mcp.digitalWrite(PLAYER1_LED, LOW);
-            mcp.digitalWrite(PLAYER2_LED, HIGH);
+            digitalWrite(PLAYER1_LED, LOW);
+            digitalWrite(PLAYER2_LED, HIGH);
         }
     }
 }
+
 
 // --------------------------------------------------
 // Setup
@@ -352,24 +356,13 @@ void setup()
 
 
     // ----------------------------------------------
-    // MCP23017 initialisieren
+    // GPIOs initialisieren
     // ----------------------------------------------
 
-    if (!mcp.begin_I2C(0x20))
-    {
-        Serial.println(
-            "FEHLER: MCP23017 nicht gefunden!"
-        );
+    pinMode(PLAYER1_LED, OUTPUT);
+    pinMode(PLAYER2_LED, OUTPUT);
 
-        while (true)
-        {
-            delay(1000);
-        }
-    }
-
-    Serial.println(
-        "MCP23017 erfolgreich gefunden!"
-    );
+    updateServeLEDs();
 
 
     // ----------------------------------------------
@@ -388,16 +381,6 @@ void setup()
     Serial.println(
         "Alle fünf Taster initialisiert."
     );
-
-
-    // ----------------------------------------------
-    // Aufschlag-LEDs initialisieren
-    // ----------------------------------------------
-
-    mcp.pinMode(PLAYER1_LED, OUTPUT);
-    mcp.pinMode(PLAYER2_LED, OUTPUT);
-
-    updateServeLEDs();
 
 
     // ----------------------------------------------
@@ -424,8 +407,8 @@ void setup()
 
 void loop()
 {
-
     updateSetFinishedBlink();
+
 
     // ----------------------------------------------
     // Spieler 1
@@ -438,16 +421,18 @@ void loop()
             player1Score++;
 
             updateDisplays();
-            
+
             if (isSetFinished())
             {
                 finishSet();
             }
+
             updateServeLEDs();
 
             Serial.println("Spieler 1: +1");
             printScore();
         }
+
         updateServeLEDs();
     }
 
@@ -464,11 +449,13 @@ void loop()
             {
                 finishSet();
             }
+
             updateServeLEDs();
 
             Serial.println("Spieler 1: -1");
             printScore();
         }
+
         updateServeLEDs();
     }
 
@@ -489,11 +476,13 @@ void loop()
             {
                 finishSet();
             }
+
             updateServeLEDs();
 
             Serial.println("Spieler 2: +1");
             printScore();
         }
+
         updateServeLEDs();
     }
 
@@ -510,11 +499,13 @@ void loop()
             {
                 finishSet();
             }
+
             updateServeLEDs();
 
             Serial.println("Spieler 2: -1");
             printScore();
         }
+
         updateServeLEDs();
     }
 
@@ -524,6 +515,7 @@ void loop()
     // ----------------------------------------------
 
     resetButton.update();
+
 
     // ----------------------------------------------
     // Langer Druck
@@ -560,12 +552,13 @@ void loop()
         {
             startNextSet();
         }
+
         // Der anfängliche Aufschlag darf nur
         // bei 0 : 0 gewechselt werden.
         else if (player1Score == 0 &&
-            player2Score == 0 &&
-            player1Sets == 0 &&
-            player2Sets == 0)
+                 player2Score == 0 &&
+                 player1Sets == 0 &&
+                 player2Sets == 0)
         {
             player1Serves = !player1Serves;
 

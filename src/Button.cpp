@@ -5,12 +5,8 @@
 // Konstruktor
 // ==================================================
 
-Button::Button(
-    Adafruit_MCP23X17* mcp,
-    uint8_t pin
-)
+Button::Button(uint8_t pin)
 {
-    this->mcp = mcp;
     this->pin = pin;
 }
 
@@ -21,9 +17,9 @@ Button::Button(
 
 void Button::begin()
 {
-    mcp->pinMode(pin, INPUT_PULLUP);
+    pinMode(pin, INPUT_PULLUP);
 
-    currentState = mcp->digitalRead(pin);
+    currentState = digitalRead(pin);
     lastReading = currentState;
 
     lastDebounceTime = millis();
@@ -36,7 +32,7 @@ void Button::begin()
 
 bool Button::pressed()
 {
-    bool reading = mcp->digitalRead(pin);
+    bool reading = digitalRead(pin);
 
 
     // ----------------------------------------------
